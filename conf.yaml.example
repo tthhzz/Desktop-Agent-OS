@@ -1,0 +1,86 @@
+# Agent Configuration Template
+# Copy this to conf.yaml and fill in your API keys
+
+system_config:
+  conf_version: 'v2.0.0'
+  host: 'localhost'
+  port: 12393
+  config_alts_dir: 'characters'
+  tool_prompts:
+    live2d_expression_prompt: 'live2d_expression_prompt'
+    group_conversation_prompt: 'group_conversation_prompt'
+    mcp_prompt: 'mcp_prompt'
+    proactive_speak_prompt: 'proactive_speak_prompt'
+
+character_config:
+  conf_name: 'mao_pro'
+  conf_uid: 'mao_pro_001'
+  live2d_model_name: 'mao_pro'
+  character_name: 'Mao'
+  avatar: 'mao.png'
+  human_name: 'Human'
+
+  persona_prompt: |
+    你是一个AI助手，具备工具调用、记忆和计算机操作能力。
+
+  agent_config:
+    conversation_agent_choice: 'langgraph_agent'
+    agent_settings:
+      langgraph_agent:
+        llm_provider: 'openai_compatible_llm'
+        faster_first_response: True
+        segment_method: 'pysbd'
+        use_mcpp: True
+        mcp_enabled_servers: ["time", "ddg-search", "playwright", "computer", "terminal", "memory"]
+        human_in_the_loop: True
+        high_risk_tools: ["computer__click", "computer__type", "computer__hotkey", "playwright__navigate", "terminal__shell_exec"]
+        max_tool_rounds: 10
+
+    llm_configs:
+      openai_compatible_llm:
+        base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1'
+        llm_api_key: 'YOUR_API_KEY_HERE'
+        organization_id: null
+        project_id: null
+        model: 'qwen2.5-vl-72b-instruct'
+        temperature: 1.0
+        interrupt_method: 'user'
+
+  asr_config:
+    asr_model: 'sherpa_onnx_asr'
+    sherpa_onnx_asr:
+      model_type: 'sense_voice'
+      sense_voice: './models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/model.int8.onnx'
+      tokens: './models/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/tokens.txt'
+      num_threads: 4
+      use_itn: True
+      provider: 'cpu'
+
+  tts_config:
+    tts_model: 'edge_tts'
+    edge_tts:
+      voice: 'zh-CN-XiaoxiaoNeural'
+
+  vad_config:
+    vad_model: 'silero_vad'
+    silero_vad:
+      orig_sr: 16000
+      target_sr: 16000
+      prob_threshold: 0.4
+      db_threshold: 60
+      required_hits: 3
+      required_misses: 24
+      smoothing_window: 5
+
+  tts_preprocessor_config:
+    remove_special_char: True
+    ignore_brackets: True
+    ignore_parentheses: True
+    ignore_asterisks: True
+    ignore_angle_brackets: True
+    translator_config:
+      translate_audio: False
+      translate_provider: 'deeplx'
+      deeplx:
+        deeplx_target_lang: 'JA'
+        deeplx_api_endpoint: 'http://localhost:1188/v2/translate'

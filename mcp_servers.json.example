@@ -1,0 +1,28 @@
+{
+    "mcp_servers": {
+      "time": {
+        "command": "python",
+        "args": ["-m", "mcp_server_time", "--local-timezone=Asia/Shanghai"]
+      },
+      "ddg-search": {
+        "command": "duckduckgo-mcp-server",
+        "args": []
+      },
+      "playwright": {
+        "command": "npx",
+        "args": ["@playwright/mcp@latest"]
+      },
+      "computer": {
+        "command": "python",
+        "args": ["-m", "open_llm_vtuber.mcp_servers.computer_use_server"]
+      },
+      "terminal": {
+        "command": "python",
+        "args": ["-m", "open_llm_vtuber.mcp_servers.terminal_server"]
+      },
+      "memory": {
+        "command": "python",
+        "args": ["-m", "open_llm_vtuber.memory.memory_mcp_server"]
+      }
+    }
+}
