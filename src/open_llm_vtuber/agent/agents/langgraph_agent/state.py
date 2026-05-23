@@ -17,6 +17,8 @@ class AgentState(TypedDict):
     - ``pending_approval`` holds an action awaiting user confirmation
       (Human-in-the-Loop).  When non-None, the graph yields an approval
       request and waits for the caller to provide ``approval_response``.
+    - ``plan_steps`` / ``current_step`` / ``retry_count`` support the
+      autonomous planning-reflection loop (Phase 5.2).
     """
 
     # ── Conversation ──────────────────────────────────────────
@@ -42,3 +44,9 @@ class AgentState(TypedDict):
     # ── Memory (Phase 3 integration) ─────────────────────────
     retrieved_memories: Optional[List[Dict[str, Any]]]
     skill_match: Optional[Dict[str, Any]]
+
+    # ── Planning & Reflection (Phase 5.2) ────────────────────
+    plan_steps: Optional[List[Dict[str, Any]]]  # [{goal, tool_hint, success_criteria}]
+    current_step: int  # Index into plan_steps
+    retry_count: int  # Retry count for current step (max 3)
+    task_complete: bool  # Whether the overall task is done

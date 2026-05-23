@@ -147,6 +147,14 @@ class MemorySystem:
             logger.info(f"MemorySystem: running consolidation at turn {self._turn_count}")
             await self.consolidator.consolidate()
 
+        # Skill evolution at higher interval
+        if self._turn_count % (self._config.consolidation_interval * 2) == 0:
+            logger.info(f"MemorySystem: running skill evolution at turn {self._turn_count}")
+            try:
+                await self.skill_miner.evolve_skills()
+            except Exception as e:
+                logger.error(f"MemorySystem: skill evolution error: {e}")
+
     async def retrieve_context(self, query: str, top_k: int = 5) -> Dict[str, Any]:
         """Retrieve relevant context from all memory layers for a query.
 

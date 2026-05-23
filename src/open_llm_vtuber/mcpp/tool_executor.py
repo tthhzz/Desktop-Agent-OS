@@ -277,13 +277,11 @@ class ToolExecutor:
                 + "Z",
             }
 
-            # For stagehand_navigate tool, include browser view links if available
-            if tool_name == "stagehand_navigate" and not is_error:
+            # For playwright/browser tools, include browser view links if available
+            if not is_error and (lookup_name.startswith("browser_") or "playwright" in tool_name.lower()):
                 live_view_data = metadata.get("liveViewData", {})
                 if live_view_data:
-                    logger.info(
-                        f"Found live view data for stagehand_navigate: {live_view_data}"
-                    )
+                    logger.info(f"Found live view data for {tool_name}: {live_view_data}")
                     status_update["browser_view"] = live_view_data
 
             yield status_update

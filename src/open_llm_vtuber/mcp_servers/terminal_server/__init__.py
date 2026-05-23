@@ -6,26 +6,27 @@ Provides these tools:
 - shell_write_file — write content to a file
 - shell_list_dir  — list directory contents
 - shell_cwd      — get/set current working directory
+
+Security: integrates with the security module for blocked commands, permission
+checks, and audit logging.
 """
 
 import os
 import asyncio
 import subprocess
+import time
 from typing import Optional
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
+from ...security.blocked_list import is_blocked
+from ...security.permission_manager import PermissionManager, PermissionLevel
+from ...security.audit_logger import AuditLogger
 
 mcp = FastMCP("terminal")
 
 # Track working directory per session
 _cwd: str = os.getcwd()
-
-# Dangerous command patterns that should be blocked outright
-_BLOCKED_PATTERNS = [
-    "rm -rf /", "del /s /q C:\\", "format ", "mkfs.",
-    ":(){ :|:& };:", "dd if=/dev/zero",
-]
 
 # Commands that require human approval (destructive but sometimes legitimate)
 _RISKY_PATTERNS = [
@@ -38,21 +39,10 @@ _RISKY_PATTERNS = [
     "sudo ", "runas ",
 ]
 
-
-def _check_safety(command: str) -> tuple[bool, str]:
-    """Check if a command is safe to execute.
-
-    Returns:
-        (safe, reason) — safe=True if command is allowed, False otherwise.
-    """
-    cmd_lower = command.lower().strip()
-
-    # Block outright dangerous commands
-    for pattern in _BLOCKED_PATTERNS:
-        if pattern in cmd_lower:
-            return False, f"Command blocked (dangerous pattern: '{pattern}')"
-
-    return True, ""
+# Initialize security components
+_permission_manager = PermissionManager()
+_audit_logger = AuditLogger()
+_audit_logger.initialize()
 
 
 def _is_risky(command: str) -> bool:
@@ -81,10 +71,17 @@ async def shell_exec(
         Command output (stdout + stderr), or error message if execution fails.
         Output is truncated to 10000 chars if too long.
     """
-    # Safety check
-    safe, reason = _check_safety(command)
-    if not safe:
-        return f"SAFETY BLOCKED: {reason}"
+    # Security: check blocked list
+    blocked, reason = is_blocked(command)
+    if blocked:
+        _audit_logger.log(
+            tool_name="shell_exec",
+            arguments=command[:200],
+            result_summary="BLOCKED",
+            permission_level="BLOCKED",
+            was_blocked=True,
+        )
+        return f"SECURITY BLOCKED: {reason}"
 
     # Cap timeout
     timeout = min(timeout, 120)
@@ -95,6 +92,7 @@ async def shell_exec(
         return f"Error: working directory does not exist: {work_dir}"
 
     try:
+        start_time = time.monotonic()
         # Use PowerShell on Windows, bash on Unix
         if os.name == "nt":
             proc = await asyncio.create_subprocess_shell(
@@ -138,6 +136,17 @@ async def shell_exec(
         # Truncate if too long
         if len(result) > 10000:
             result = result[:10000] + f"\n... [truncated, total {len(result)} chars]"
+
+        # Audit log
+        elapsed_ms = int((time.monotonic() - start_time) * 1000)
+        _audit_logger.log(
+            tool_name="shell_exec",
+            arguments=command[:200],
+            result_summary=result[:200],
+            permission_level="SENSITIVE",
+            was_approved=not _is_risky(command),
+            duration_ms=elapsed_ms,
+        )
 
         # Update session CWD if the command was a cd
         cmd_stripped = command.strip()

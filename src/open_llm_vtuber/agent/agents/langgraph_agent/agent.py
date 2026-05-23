@@ -86,6 +86,9 @@ class LangGraphAgent(AgentInterface):
         # Build LangChain-compatible LLM from our existing StatelessLLM config
         self._lc_llm = self._build_lc_llm(llm)
 
+        # Status callback for agent dashboard (set externally)
+        self._status_callback = None
+
         self.set_system(system if system else self._system)
         self._build_graph()
 
@@ -144,6 +147,7 @@ class LangGraphAgent(AgentInterface):
             high_risk_tools=self._high_risk_tools,
             human_in_the_loop=self._human_in_the_loop,
             memory_system=self._memory_system,
+            lc_tools=self._lc_tools,
         )
 
     def set_system(self, system: str):
@@ -151,6 +155,16 @@ class LangGraphAgent(AgentInterface):
         if self.interrupt_method == "user":
             system = f"{system}\n\nIf you received `[interrupted by user]` signal, you were interrupted."
         self._system = system
+
+    def set_status_callback(self, callback):
+        """Set a callback to receive agent execution status updates.
+
+        The callback receives dicts with type='agent_state_update'
+        containing node name, step progress, and tool info.
+        """
+        self._status_callback = callback
+        from .utils.status_emitter import get_status_emitter
+        get_status_emitter().set_callback(callback)
 
     # ── Memory management (same interface as BasicMemoryAgent) ──
 
@@ -267,6 +281,10 @@ class LangGraphAgent(AgentInterface):
             "approval_response": None,
             "retrieved_memories": None,
             "skill_match": None,
+            "plan_steps": None,
+            "current_step": 0,
+            "retry_count": 0,
+            "task_complete": False,
         }
 
     # ── Main chat method (with decorator pipeline) ────────────
@@ -289,6 +307,12 @@ class LangGraphAgent(AgentInterface):
             self.reset_interrupt()
             initial_state = self._input_to_state(input_data)
             logger.info(f"[LangGraph] ▶ input messages: {len(initial_state['messages'])}")
+
+            # Context compression for long conversations
+            from .utils.context_compressor import compress_messages
+            initial_state["messages"] = await compress_messages(
+                initial_state["messages"], llm=self._lc_llm
+            )
 
             # Run the graph and collect the final AI message
             try:

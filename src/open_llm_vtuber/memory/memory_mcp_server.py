@@ -111,5 +111,87 @@ async def skill_find(task_description: str) -> str:
     return json.dumps(skills, ensure_ascii=False, default=str)
 
 
+@mcp.tool()
+async def skill_validate(skill_id: str) -> str:
+    """Validate a skill's structure and parameter definitions.
+
+    Checks: required fields, param types, template placeholders.
+
+    Args:
+        skill_id: The skill ID to validate.
+
+    Returns:
+        Validation result: "Valid" or error description.
+    """
+    if not _memory_system or not _memory_system.skill:
+        return "Error: Memory system not initialized"
+
+    is_valid, reason = await _memory_system.skill.validate_skill(skill_id)
+    return f"Skill validation: {'VALID' if is_valid else 'INVALID'} — {reason}"
+
+
+@mcp.tool()
+async def skill_evolve() -> str:
+    """Run the skill self-evolution cycle: merge similar skills, prune unused, validate new ones.
+
+    This is an advanced operation that optimizes the skill database.
+
+    Returns:
+        JSON summary of evolution actions: {merged, pruned, validated}.
+    """
+    if not _memory_system or not _memory_system.skill_miner:
+        return "Error: Memory system not initialized"
+
+    result = await _memory_system.skill_miner.evolve_skills()
+    import json
+    return json.dumps(result, ensure_ascii=False)
+
+
+@mcp.tool()
+async def skill_create(
+    name: str,
+    description: str,
+    tools: str,
+    trigger_condition: str,
+    params: str = "[]",
+    template: str = "",
+) -> str:
+    """Create a new parameterized skill.
+
+    Args:
+        name: Short snake_case name (e.g., "web_search_and_summarize").
+        description: What this skill does.
+        tools: Comma-separated tool names (e.g., "ddg-search,time").
+        trigger_condition: When should this skill be activated.
+        params: JSON array of parameter definitions. Default: "[]".
+                Example: [{"name": "topic", "type": "string", "required": true}]
+        template: Prompt template with {param} placeholders. Default: "".
+
+    Returns:
+        Confirmation with the skill ID.
+    """
+    if not _memory_system or not _memory_system.skill:
+        return "Error: Memory system not initialized"
+
+    import json
+
+    tool_list = [t.strip() for t in tools.split(",") if t.strip()]
+
+    try:
+        param_list = json.loads(params) if params else []
+    except json.JSONDecodeError:
+        param_list = []
+
+    record_id = await _memory_system.skill.register_skill(
+        name=name,
+        description=description,
+        tools=tool_list,
+        trigger_condition=trigger_condition,
+        params=param_list,
+        template=template or description,
+    )
+    return f"Created skill '{name}' (id={record_id[:8]}..., {len(tool_list)} tools, {len(param_list)} params)"
+
+
 if __name__ == "__main__":
     mcp.run()

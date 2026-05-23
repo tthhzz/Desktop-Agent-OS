@@ -87,6 +87,20 @@ async def process_single_conversation(
         if images:
             logger.info(f"With {len(images)} images")
 
+        # Wire up agent status callback to forward state updates via WebSocket
+        if hasattr(context.agent_engine, 'set_status_callback'):
+            def _status_forwarder(status_update: dict):
+                """Forward agent state updates to the WebSocket client."""
+                try:
+                    import asyncio as _asyncio
+                    loop = _asyncio.get_event_loop()
+                    if loop.is_running():
+                        loop.create_task(websocket_send(json.dumps(status_update)))
+                except Exception as e:
+                    logger.debug(f"Status forward error: {e}")
+
+            context.agent_engine.set_status_callback(_status_forwarder)
+
         try:
             # agent.chat yields Union[SentenceOutput, Dict[str, Any]]
             agent_output_stream = context.agent_engine.chat(batch_input)
@@ -166,11 +180,21 @@ async def process_single_conversation(
     except asyncio.CancelledError:
         logger.info(f"🤡👍 Conversation {session_emoji} cancelled because interrupted.")
         raise
+    except AssertionError:
+        # Known upstream issue: websockets raises AssertionError when client disconnects mid-stream
+        logger.debug(f"Conversation {session_emoji} — websocket assertion (client likely disconnected)")
     except Exception as e:
-        logger.error(f"Error in conversation chain: {e}")
-        await websocket_send(
-            json.dumps({"type": "error", "message": f"Conversation error: {str(e)}"})
-        )
-        raise
+        if not str(e):
+            # Empty-message exception (common with websocket interruption)
+            logger.debug(f"Conversation {session_emoji} — silent exception (likely websocket disconnect)")
+        else:
+            logger.error(f"Error in conversation chain: {e}")
+            try:
+                await websocket_send(
+                    json.dumps({"type": "error", "message": f"Conversation error: {str(e)}"})
+                )
+            except Exception:
+                pass
+            raise
     finally:
         cleanup_conversation(tts_manager, session_emoji)

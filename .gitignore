@@ -76,3 +76,9 @@ private/
 mcp_servers.json
 
 .vscode/
+
+# Local data and research docs
+memory_data/
+MCP_DEEP_DIVE.md
+VISION_DEEP_DIVE.md
+INTERVIEW_GUIDE.md

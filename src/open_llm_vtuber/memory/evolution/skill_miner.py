@@ -3,6 +3,8 @@
 Monitors tool usage across conversations. When a pattern of tool calls
 occurs frequently (e.g., search → summarize → send), it automatically
 creates a Skill that can be reused.
+
+Phase 5.3: Added Designer for self-evolution (merge, prune, optimize).
 """
 
 import json
@@ -25,9 +27,11 @@ Generate a skill with:
 - description: What this skill does in one sentence
 - tools: List of tool names in order
 - trigger_condition: When should this skill be activated?
+- params: Parameter definitions (list of dicts with name, type, required, default)
+- template: Prompt template with {param_name} placeholders
 
 Respond with JSON only:
-{{"name": "...", "description": "...", "tools": [...], "trigger_condition": "..."}}"""
+{{"name": "...", "description": "...", "tools": [...], "trigger_condition": "...", "params": [...], "template": "..."}}"""
 
 
 class SkillMiner:
@@ -107,11 +111,19 @@ class SkillMiner:
         if len(tools) > 1:
             name += f"_to_{'_'.join(t.split('__')[-1] for t in tools[1:])}"
 
+        # Generate parameterized template
+        params = [
+            {"name": "query", "type": "string", "required": True},
+            {"name": "count", "type": "int", "required": False, "default": 3},
+        ]
+
         return {
             "name": name,
             "description": f"Automated workflow: {' → '.join(tools)} (used {frequency} times)",
             "tools": tools,
             "trigger_condition": f"When user request matches the pattern: {' → '.join(tools)}",
+            "params": params,
+            "template": "搜索{query}相关信息，总结{count}个要点",
             "frequency": frequency,
         }
 
@@ -147,3 +159,41 @@ class SkillMiner:
         except Exception as e:
             logger.error(f"SkillMiner LLM error: {e}")
             return self._generate_rule_based(tools, frequency)
+
+    # ── Phase 5.3: Designer (self-evolution) ──────────────────
+
+    async def evolve_skills(self) -> Dict[str, Any]:
+        """Run the skill evolution cycle: merge similar, prune unused, validate new.
+
+        Returns summary of evolution actions taken.
+        """
+        result = {"merged": 0, "pruned": 0, "validated": 0}
+
+        # 1. Validate all unvalidated skills
+        skills = await self._skill.list_skills(limit=100)
+        for skill in skills:
+            if not skill.get("validated", False):
+                is_valid, reason = await self._skill.validate_skill(skill["id"])
+                if is_valid:
+                    result["validated"] += 1
+
+        # 2. Find and merge similar skills
+        for skill in skills:
+            if not skill.get("id"):
+                continue
+            similar = await self._skill.find_similar_skills(skill["id"], threshold=0.6)
+            for other in similar[:1]:  # Merge with the most similar one
+                other_id = other.get("id")
+                if other_id:
+                    merged = await self._skill.merge_skills(skill["id"], other_id)
+                    if merged:
+                        result["merged"] += 1
+                    break  # Only merge one pair per skill
+
+        # 3. Prune low-usage skills
+        pruned = await self._skill.prune_low_usage(min_frequency=2, max_age_days=30)
+        result["pruned"] = pruned
+
+        if any(result.values()):
+            logger.info(f"SkillMiner Designer: evolved skills — {result}")
+        return result

@@ -2,7 +2,7 @@
 
 from typing import Dict, Any, AsyncIterator, Optional
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 from loguru import logger
 
 from ..state import AgentState
@@ -85,7 +85,22 @@ async def chat_node(
         # Skip system messages (we already added our own)
         if msg.type == "system":
             continue
-        llm_messages.append(msg)
+        # Preserve multimodal content from ToolMessages (screenshots etc.)
+        if isinstance(msg, ToolMessage):
+            content = msg.content
+            if isinstance(content, list):
+                # Multimodal content: pass through so VLM can see screenshots
+                llm_messages.append(HumanMessage(content=content))
+            elif isinstance(content, str) and content.startswith("data:image/"):
+                # Raw base64 image — wrap in multimodal format
+                llm_messages.append(HumanMessage(content=[
+                    {"type": "text", "text": "[Tool result: Screenshot]"},
+                    {"type": "image_url", "image_url": {"url": content}},
+                ]))
+            else:
+                llm_messages.append(msg)
+        else:
+            llm_messages.append(msg)
 
     try:
         # Use streaming for real-time token generation
